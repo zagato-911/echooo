@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>优惠券编辑器</title>
+    <style>
+        @font-face {
+            font-family: 'CHERRYDINPRO';
+            src: url('./CHERRYDINPRO-MEDIUM.OTF') format('opentype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'SFHELLO';
+            src: url('./sf-hello-medium.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'CHERRYDINPRO', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-weight: 600;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .editor-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 24px;
+            align-items: flex-start;
+        }
+
+        @media (max-width: 768px) {
+            .editor-wrapper {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .canvas-container {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        #previewCanvas {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            cursor: crosshair;
+        }
+
+        .control-panel {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            max-height: calc(100vh - 140px);
+            overflow-y: auto;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 12px;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(17, 153, 142, 0.4);
+        }
+
+        .status {
+            text-align: center;
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .status.show {
+            opacity: 1;
+        }
+
+        .status.success {
+            background: rgba(56, 239, 125, 0.15);
+            color: #11998e;
+        }
+
+        .status.error {
+            background: rgba(255, 107, 107, 0.15);
+            color: #ff6b6b;
+        }
+
+        .upload-area {
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+            padding: 30px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+            transform: scale(1.02);
+        }
+
+        .upload-area svg {
+            width: 48px;
+            height: 48px;
+            color: #999;
+            margin-bottom: 12px;
+        }
+
+        .upload-area span {
+            color: #666;
+            font-size: 14px;
+            display: block;
+        }
+
+        #fileInput {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎫 优惠券编辑器</h1>
+        
+        <div class="editor-wrapper">
+            <div class="canvas-container">
+                <canvas id="previewCanvas"></canvas>
+            </div>
+
+            <div class="control-panel">
+                <input type="file" id="fileInput" accept="image/*">
+                <div class="upload-area" id="uploadArea">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    <span>点击或拖拽上传图片</span>
+                </div>
+
+                <button class="btn btn-success" id="copyBtn">📋 一键复制图片</button>
+
+                <div class="status" id="status"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('previewCanvas');
+        const ctx = canvas.getContext('2d');
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const status = document.getElementById('status');
+        const copyBtn = document.getElementById('copyBtn');
+
+        let originalImage = null;
+        let selectedItem = null;
+        let canvasRect = null;
+        let fontReady = false;
+
+        const textItems = {
+            date: {
+                text: '2026-07-15',
+                x: 48.8,
+                y: 11.4,
+                size: 3.1,
+                color: '#333333',
+                fontFamily: 'SFHELLO'
+            },
+            amount: {
+                text: '200,000.00',
+                x: 11.8,
+                y: 23.4,
+                size: 10,
+                color: '#333333',
+                fontFamily: 'CHERRYDINPRO'
+            },
+            rate1: {
+                text: '2.58%',
+                x: 32.9,
+                y: 60.9,
+                size: 12,
+                color: '#333333',
+                fontFamily: 'CHERRYDINPRO'
+            },
+            rate2: {
+                text: '2.58%指定利率券',
+                x: 52.2,
+                y: 75.5,
+                size: 3.7,
+                color: '#ff9800',
+                fontFamily: 'CHERRYDINPRO'
+            },
+            rateOld: {
+                text: '3.99%',
+                x: 20.6,
+                y: 76.4,
+                size: 5.5,
+                color: '#999999',
+                fontFamily: 'CHERRYDINPRO',
+                strikethrough: true
+            }
+        };
+
+        // ==========关键修改：自动加载仓库同目录ces111.jpg，不再调用外部接口==========
+        const defaultImageUrl = './ces111.jpg';
+
+        // 等待字体加载完成
+        async function waitFontLoad() {
+            if (!document.fonts) {
+                fontReady = true;
+                return;
+            }
+            try {
+                await document.fonts.ready;
+                await Promise.all([
+                    document.fonts.load("1px CHERRYDINPRO"),
+                    document.fonts.load("1px SFHELLO")
+                ]);
+                fontReady = true;
+            } catch (e) {
+                showStatus('⚠️ 字体加载异常，使用系统默认字体', 'error');
+                fontReady = true;
+            }
+        }
+
+        const loadImage = (src) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = async () => {
+                originalImage = img;
+                canvas.width = img.width;
+                canvas.height = img.height;
+                await waitFontLoad();
+                drawCanvas();
+                showStatus('✅ 仓库底图 ces111.jpg 自动加载成功！');
+            };
+            img.onerror = () => {
+                showStatus('❌ 加载失败：检查仓库根目录是否存在 ces111.jpg', 'error');
+            };
+            img.src = src;
+        };
+
+        const handleFileUpload = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                loadImage(event.target.result);
+            };
+            reader.readAsDataURL(file);
+        };
+
+        const getTextRect = (item) => {
+            const w = canvas.width;
+            const h = canvas.height;
+            const fontSize = Math.min(w * item.size / 100, h * item.size / 100);
+            const x = w * item.x / 100;
+            const y = h * item.y / 100;
+            
+            ctx.font = `${fontSize}px '${item.fontFamily}', -apple-system, BlinkMacSystemFont, 'Noto Sans SC', 'Microsoft YaHei', sans-serif`;
+            const metrics = ctx.measureText(item.text);
+            
+            return {
+                x: x,
+                y: y - fontSize,
+                width: metrics.width,
+                height: fontSize * 1.2
+            };
+        };
+
+        const drawCanvas = () => {
+            if (!originalImage || !fontReady) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(originalImage, 0, 0);
+
+            const w = canvas.width;
+            const h = canvas.height;
+
+            for (const [itemId, item] of Object.entries(textItems)) {
+                const fontSize = Math.min(w * item.size / 100, h * item.size / 100);
+                const x = w * item.x / 100;
+                const y = h * item.y / 100;
+                
+                ctx.font = `${fontSize}px '${item.fontFamily}', -apple-system, BlinkMacSystemFont, 'Noto Sans SC', 'Microsoft YaHei', sans-serif`;
+                ctx.fillStyle = item.color;
+                ctx.textAlign = 'left';
+                ctx.fillText(item.text, x, y);
+
+                if (item.strikethrough) {
+                    const metrics = ctx.measureText(item.text);
+                    ctx.strokeStyle = item.color;
+                    ctx.lineWidth = fontSize * 0.09;
+                    ctx.beginPath();
+                    ctx.moveTo(x, y - fontSize * 0.35);
+                    ctx.lineTo(x + metrics.width, y - fontSize * 0.35);
+                    ctx.stroke();
+                }
+
+                if (selectedItem === itemId) {
+                    ctx.strokeStyle = '#667eea';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    const metrics = ctx.measureText(item.text);
+                    ctx.strokeRect(x - 5, y - fontSize - 5, metrics.width + 10, fontSize + 10);
+                    ctx.setLineDash([]);
+                }
+            }
+        };
+
+        const showStatus = (message, type = 'success') => {
+            status.textContent = message;
+            status.className = `status show ${type}`;
+            setTimeout(() => {
+                status.classList.remove('show');
+            }, 3000);
+        };
+
+        const copyImage = async () => {
+            try {
+                const prevSelected = selectedItem;
+                selectedItem = null;
+                drawCanvas();
+                
+                canvas.toBlob(async (blob) => {
+                    if (!blob) {
+                        showStatus('❌ 复制失败', 'error');
+                        return;
+                    }
+                    
+                    try {
+                        await navigator.clipboard.write([
+                            new ClipboardItem({ 'image/png': blob })
+                        ]);
+                        showStatus('✅ 图片已复制到剪贴板！');
+                    } catch (err) {
+                        const link = document.createElement('a');
+                        link.download = '优惠券.png';
+                        link.href = URL.createObjectURL(blob);
+                        link.click();
+                        showStatus('✅ 浏览器不支持复制，已自动下载图片！');
+                    }
+                }, 'image/png');
+                
+                selectedItem = prevSelected;
+                setTimeout(drawCanvas, 100);
+            } catch (err) {
+                showStatus('❌ 复制失败，请右键画布保存图片', 'error');
+            }
+        };
+
+        const getCanvasCoords = (e) => {
+            if (!canvasRect) canvasRect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / canvasRect.width;
+            const scaleY = canvas.height / canvasRect.height;
+            return {
+                x: (e.clientX - canvasRect.left) * scaleX,
+                y: (e.clientY - canvasRect.top) * scaleY
+            };
+        };
+
+        const findClickedItem = (x, y) => {
+            for (const [itemId, item] of Object.entries(textItems)) {
+                const rect = getTextRect(item);
+                if (x >= rect.x - 10 && x <= rect.x + rect.width + 10 &&
+                    y >= rect.y - 10 && y <= rect.y + rect.height + 10) {
+                    return itemId;
+                }
+            }
+            return null;
+        };
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const coords = getCanvasCoords(touch);
+            const clicked = findClickedItem(coords.x, coords.y);
+            
+            if (clicked) {
+                selectedItem = clicked;
+                drawCanvas();
+            }
+        }, { passive: false });
+
+        let doubleClickTimer = null;
+
+        canvas.addEventListener('click', (e) => {
+            const coords = getCanvasCoords(e);
+            const clicked = findClickedItem(coords.x, coords.y);
+            
+            if (doubleClickTimer) {
+                clearTimeout(doubleClickTimer);
+                doubleClickTimer = null;
+                
+                if (clicked) {
+                    editTextItem(clicked);
+                }
+            } else {
+                doubleClickTimer = setTimeout(() => {
+                    doubleClickTimer = null;
+                    
+                    if (clicked) {
+                        selectedItem = clicked;
+                        drawCanvas();
+                    } else {
+                        selectedItem = null;
+                        drawCanvas();
+                    }
+                }, 300);
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (!selectedItem) return;
+            
+            const item = textItems[selectedItem];
+            
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || 
+                e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                e.preventDefault();
+                
+                const step = 0.5;
+                
+                if (e.key === 'ArrowUp') {
+                    item.y = Math.max(0, item.y - step);
+                } else if (e.key === 'ArrowDown') {
+                    item.y = Math.min(100, item.y + step);
+                } else if (e.key === 'ArrowLeft') {
+                    item.x = Math.max(0, item.x - step);
+                } else if (e.key === 'ArrowRight') {
+                    item.x = Math.min(100, item.x + step);
+                }
+                
+                drawCanvas();
+            } else if (e.ctrlKey && (e.key === '+' || e.key === '-')) {
+                e.preventDefault();
+                
+                const step = 0.1;
+                
+                if (e.key === '+') {
+                    item.size = Math.min(25, item.size + step);
+                } else if (e.key === '-') {
+                    item.size = Math.max(1, item.size - step);
+                }
+                
+                drawCanvas();
+            }
+        });
+
+        const editTextItem = (itemId) => {
+            const item = textItems[itemId];
+            const w = canvas.width;
+            const h = canvas.height;
+            const fontSize = Math.min(w * item.size / 100, h * item.size / 100);
+            const x = w * item.x / 100;
+            const y = h * item.y / 100;
+            
+            ctx.font = `${fontSize}px '${item.fontFamily}', -apple-system, BlinkMacSystemFont, 'Noto Sans SC', 'Microsoft YaHei', sans-serif`;
+            const metrics = ctx.measureText(item.text);
+            
+            const canvasRect = canvas.getBoundingClientRect();
+            const scaleX = canvasRect.width / canvas.width;
+            const scaleY = canvasRect.height / canvas.height;
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = item.text;
+            input.style.position = 'absolute';
+            input.style.left = `${canvasRect.left + x * scaleX}px`;
+            input.style.top = `${canvasRect.top + (y - fontSize) * scaleY}px`;
+            input.style.width = `${metrics.width * scaleX + 20}px`;
+            input.style.height = `${fontSize * scaleY + 10}px`;
+            input.style.fontSize = `${fontSize * scaleY}px`;
+            input.style.fontFamily = item.fontFamily;
+            input.style.color = item.color;
+            input.style.background = 'rgba(255,255,255,0.9)';
+            input.style.border = '2px solid #667eea';
+            input.style.borderRadius = '4px';
+            input.style.outline = 'none';
+            input.style.padding = '2px 8px';
+            input.style.zIndex = '100';
+            input.style.textAlign = 'left';
+            input.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+            
+            document.body.appendChild(input);
+            
+            input.focus();
+            input.select();
+            
+            const saveAndRemove = () => {
+                if (input.value.trim()) {
+                    let newValue = input.value.trim();
+                    
+                    if (itemId === 'amount') {
+                        newValue = newValue.replace(/,/g, '');
+                        if (!isNaN(newValue.replace('.', ''))) {
+                            const parts = newValue.split('.');
+                            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                            newValue = parts.join('.');
+                        }
+                    }
+                    
+                    item.text = newValue;
+                    
+                    if (itemId === 'rate1') {
+                        const rate2 = textItems.rate2;
+                        const match = rate2.text.match(/^(.+?%)(.*)$/);
+                        if (match) {
+                            rate2.text = item.text + match[2];
+                        }
+                    }
+                }
+                document.body.removeChild(input);
+                drawCanvas();
+            };
+            
+            input.addEventListener('blur', saveAndRemove);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    input.blur();
+                } else if (e.key === 'Escape') {
+                    document.body.removeChild(input);
+                    drawCanvas();
+                }
+            });
+        };
+
+        fileInput.addEventListener('change', handleFileUpload);
+        
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                fileInput.files = e.dataTransfer.files;
+                handleFileUpload({ target: fileInput });
+            }
+        });
+
+        copyBtn.addEventListener('click', copyImage);
+
+        // 页面打开自动加载仓库内 ces111.jpg
+        loadImage(defaultImageUrl);
+    </script>
+</body>
+</html>
